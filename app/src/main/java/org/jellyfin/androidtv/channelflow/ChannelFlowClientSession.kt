@@ -23,6 +23,7 @@ class ChannelFlowClientSession(
 	private val store: ChannelFlowConnectionStore,
 	private val access: ChannelFlowAccessGuard,
 	private val catalog: ChannelFlowGuideRepository,
+	private val resolver: ChannelFlowEndpointResolver,
 ) {
 	private val app = context.applicationContext
 	private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -57,7 +58,12 @@ class ChannelFlowClientSession(
 	suspend fun refresh() {
 		val connection = store.connection ?: return
 		if (connection.apiKey.isBlank() || connection.baseUrl.isBlank()) return
-		when (val result = postSession(connection)) {
+		val result = runCatching {
+			resolver.withActiveFailover(store, connection) { active -> postSession(connection, active) }
+		}
+			.onFailure { error -> Timber.w(error, "ChannelFlow session heartbeat failed") }
+			.getOrNull() ?: return
+		when (result) {
 			is SessionOutcome.Rejected -> access.forgetUnauthorized(connection)
 			is SessionOutcome.Updated -> {
 				if (result.apiKey.isNotBlank() && result.apiKey != connection.apiKey) {
@@ -71,22 +77,27 @@ class ChannelFlowClientSession(
 		}
 	}
 
-	suspend fun revoke(connection: ChannelFlowConnection) {
+	suspend fun revoke(serverId: String, connection: ChannelFlowConnection) {
 		if (connection.apiKey.isBlank() || connection.baseUrl.isBlank()) return
 		runCatching {
 			withContext(Dispatchers.IO) {
-				val request = Request.Builder()
-					.url(ChannelFlowUrls.revokeUrl(connection.baseUrl))
-					.header("X-Api-Key", connection.apiKey)
-					.header("Accept", "application/json")
-					.delete()
-					.build()
-				http.newCall(request).execute().close()
+				resolver.withActiveFailover(store, connection, serverId) { active ->
+					val request = Request.Builder()
+						.url(ChannelFlowUrls.revokeUrl(active.baseUrl))
+						.header("X-Api-Key", connection.apiKey)
+						.header("Accept", "application/json")
+						.delete()
+						.build()
+					http.newCall(request).execute().close()
+				}
 			}
 		}
 	}
 
-	private suspend fun postSession(connection: ChannelFlowConnection): SessionOutcome =
+	private suspend fun postSession(
+		connection: ChannelFlowConnection,
+		active: ChannelFlowEndpoint,
+	): SessionOutcome =
 		withContext(Dispatchers.IO) {
 			val payload = json.encodeToString(
 				SessionRequest.serializer(),
@@ -98,7 +109,7 @@ class ChannelFlowClientSession(
 				),
 			)
 			val request = Request.Builder()
-				.url(ChannelFlowUrls.sessionUrl(connection.baseUrl))
+				.url(ChannelFlowUrls.sessionUrl(active.baseUrl))
 				.header("X-Api-Key", connection.apiKey)
 				.header("Accept", "application/json")
 				.header("Content-Type", "application/json")

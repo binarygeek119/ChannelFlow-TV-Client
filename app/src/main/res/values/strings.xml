@@ -123,6 +123,13 @@
     <string name="lbl_current_server">Current server</string>
     <string name="lbl_no_saved_servers">No servers saved yet</string>
     <string name="lbl_no_servers_to_remove">No servers to remove</string>
+    <string name="lbl_connection_route">Connection route</string>
+    <string name="lbl_endpoint_auto">Automatic (local when reachable)</string>
+    <string name="lbl_endpoint_local">Local URL only</string>
+    <string name="lbl_endpoint_public">Public URL only</string>
+    <string name="msg_endpoint_using_local">Using the local URL on your network</string>
+    <string name="msg_endpoint_using_public">Using the public URL</string>
+    <string name="msg_endpoint_checking">Checking which address is reachable…</string>
     <string name="lbl_ok">Ok</string>
     <string name="lbl_born">"Born "</string>
     <string name="lbl_loading_elipses">Loading…</string>

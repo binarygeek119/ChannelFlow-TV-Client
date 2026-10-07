@@ -34,7 +34,7 @@ object ChannelFlowUrls {
 		return query.split('&').firstNotNullOfOrNull { part ->
 			val name = part.substringBefore('=', missingDelimiterValue = part)
 			if (!name.equals("apiKey", ignoreCase = true)) null
-			else decodeQuery(part.substringAfter('=', missingDelimiterValue = ""))
+			else QueryCodec.decode(part.substringAfter('=', missingDelimiterValue = ""))
 		}.orEmpty()
 	}
 
@@ -49,8 +49,25 @@ object ChannelFlowUrls {
 		val kept = query.split('&').filter { part ->
 			part.isNotEmpty() && !part.substringBefore('=').equals("apiKey", ignoreCase = true)
 		}
-		val next = kept + ("apiKey=" + encodeQuery(apiKey))
+		val next = kept + ("apiKey=" + QueryCodec.encode(apiKey))
 		return base + "?" + next.joinToString("&") + fragment
+	}
+
+	/**
+	 * Swaps the base [from] of [url] for base [to], keeping path, query and fragment, so a
+	 * server addressed both as `https://host/app` and `http://192.168.1.5:8097` can be reached
+	 * through either URL. Returns null when [url] is not served from [from] so callers can leave
+	 * links from other hosts untouched.
+	 */
+	fun replaceBase(url: String, from: String, to: String): String? {
+		val value = url.trim()
+		val source = from.trim().trimEnd('/')
+		val target = to.trim().trimEnd('/')
+		if (source.isBlank() || target.isBlank()) return null
+		if (!value.startsWith(source, ignoreCase = true)) return null
+		val rest = value.substring(source.length)
+		if (rest.isNotEmpty() && rest[0] !in "/?#") return null
+		return target + rest
 	}
 
 	fun sessionUrl(baseUrl: String): String =
@@ -71,10 +88,12 @@ object ChannelFlowUrls {
 	}
 
 	fun clientLogsUrl(baseUrl: String): String = ChannelFlowClientLogs.ingestUrl(baseUrl)
+}
 
-	private fun encodeQuery(value: String): String =
+private object QueryCodec {
+	fun encode(value: String): String =
 		URLEncoder.encode(value, "UTF-8").replace("+", "%20")
 
-	private fun decodeQuery(value: String): String =
+	fun decode(value: String): String =
 		URLDecoder.decode(value.replace("+", "%20"), "UTF-8")
 }

@@ -28,6 +28,7 @@ class ChannelFlowLogShipper(
 	context: Context,
 	private val store: ChannelFlowConnectionStore,
 	private val access: ChannelFlowAccessGuard,
+	private val resolver: ChannelFlowEndpointResolver,
 ) {
 	private val app = context.applicationContext
 	private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -101,7 +102,9 @@ class ChannelFlowLogShipper(
 		}
 		if (batch.isEmpty()) return
 
-		val ok = runCatching { post(connection, batch) }.getOrElse { false }
+		val ok = runCatching {
+			resolver.withActiveFailover(store, connection) { active -> post(connection, active, batch) }
+		}.getOrElse { false }
 		if (!ok) {
 			synchronized(queueLock) {
 				for (i in batch.indices.reversed()) {
@@ -112,7 +115,11 @@ class ChannelFlowLogShipper(
 		}
 	}
 
-	private suspend fun post(connection: ChannelFlowConnection, batch: List<ChannelFlowLogEntry>): Boolean =
+	private suspend fun post(
+		connection: ChannelFlowConnection,
+		active: ChannelFlowEndpoint,
+		batch: List<ChannelFlowLogEntry>,
+	): Boolean =
 		withContext(Dispatchers.IO) {
 			val payload = ChannelFlowLogBatch(
 				deviceId = ChannelFlowDevice.id(app),
@@ -124,7 +131,7 @@ class ChannelFlowLogShipper(
 			val body = json.encodeToString(ChannelFlowLogBatch.serializer(), payload)
 				.toRequestBody(JSON)
 			val request = Request.Builder()
-				.url(ChannelFlowClientLogs.ingestUrl(connection.baseUrl))
+				.url(ChannelFlowClientLogs.ingestUrl(active.baseUrl))
 				.header("X-Api-Key", connection.apiKey)
 				.header("Accept", "application/json")
 				.header("User-Agent", USER_AGENT)

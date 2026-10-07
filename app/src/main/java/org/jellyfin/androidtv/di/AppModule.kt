@@ -30,6 +30,7 @@ import org.jellyfin.androidtv.ui.InteractionTrackerViewModel
 import org.jellyfin.androidtv.channelflow.ChannelFlowAccessGuard
 import org.jellyfin.androidtv.channelflow.ChannelFlowClientSession
 import org.jellyfin.androidtv.channelflow.ChannelFlowConnectionStore
+import org.jellyfin.androidtv.channelflow.ChannelFlowEndpointResolver
 import org.jellyfin.androidtv.channelflow.ChannelFlowGuideRepository
 import org.jellyfin.androidtv.channelflow.ChannelFlowLogShipper
 import org.jellyfin.androidtv.channelflow.ChannelFlowPairClient
@@ -136,11 +137,12 @@ val appModule = module {
 	single { InteractionTrackerViewModel(get(), get()) }
 
 	single { ChannelFlowConnectionStore(androidContext()) }
+	single { ChannelFlowEndpointResolver(androidContext()) }
 	single { ChannelFlowPairClient() }
-	single { ChannelFlowGuideRepository(get(), get(), lazy { get<ChannelFlowAccessGuard>() }) }
+	single { ChannelFlowGuideRepository(get(), get(), lazy { get<ChannelFlowAccessGuard>() }, get()) }
 	single { ChannelFlowAccessGuard(androidContext(), get(), get()) }
-	single { ChannelFlowClientSession(androidContext(), get(), get(), get()) }
-	single { ChannelFlowLogShipper(androidContext(), get(), get()) }
+	single { ChannelFlowClientSession(androidContext(), get(), get(), get(), get()) }
+	single { ChannelFlowLogShipper(androidContext(), get(), get(), get()) }
 	single { ChannelFlowUpdateChecker(androidContext()) }
 	single { ChannelFlowReminderScheduler(androidContext()) }
 

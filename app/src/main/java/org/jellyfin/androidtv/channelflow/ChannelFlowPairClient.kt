@@ -156,16 +156,30 @@ class ChannelFlowPairClient {
 
 	private fun connectionFromCiphertext(pin: String, ciphertext: String): ChannelFlowConnection {
 		val payload = ChannelFlowPinCrypto.decrypt(pin, ciphertext)
-		val m3u = payload.m3u
-		val epg = payload.xmltv
-		if (m3u.isBlank() || epg.isBlank()) {
-			error("Pin payload did not include M3U and XMLTV URLs")
-		}
+		val primary = endpoint(payload.m3u, payload.xmltv)
+			?: endpoint(payload.m3uPublic, payload.xmltvPublic)
+			?: endpoint(payload.m3uLocal, payload.xmltvLocal)
+			?: error("Pin payload did not include M3U and XMLTV URLs")
+		val apiKey = ChannelFlowUrls.extractApiKey(primary.m3uUrl)
+			.ifBlank { ChannelFlowUrls.extractApiKey(primary.epgUrl) }
 		return ChannelFlowConnection(
-			baseUrl = ChannelFlowUrls.baseUrlFromLiveTvUrl(m3u),
-			m3uUrl = m3u,
-			epgUrl = epg,
-			apiKey = ChannelFlowUrls.extractApiKey(m3u).ifBlank { ChannelFlowUrls.extractApiKey(epg) },
+			baseUrl = primary.baseUrl,
+			m3uUrl = primary.m3uUrl,
+			epgUrl = primary.epgUrl,
+			apiKey = apiKey,
+			publicEndpoint = endpoint(payload.m3uPublic, payload.xmltvPublic),
+			localEndpoint = endpoint(payload.m3uLocal, payload.xmltvLocal),
+		)
+	}
+
+	private fun endpoint(m3u: String?, xmltv: String?): ChannelFlowEndpoint? {
+		val playlist = m3u?.trim().orEmpty()
+		val listings = xmltv?.trim().orEmpty()
+		if (playlist.isBlank() || listings.isBlank()) return null
+		return ChannelFlowEndpoint(
+			baseUrl = ChannelFlowUrls.baseUrlFromLiveTvUrl(playlist),
+			m3uUrl = playlist,
+			epgUrl = listings,
 		)
 	}
 }

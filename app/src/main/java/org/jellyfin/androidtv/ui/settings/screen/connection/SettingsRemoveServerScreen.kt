@@ -70,7 +70,7 @@ fun SettingsRemoveServerScreen() {
 						val removingActive = selected
 						val connection = server.connection
 						scope.launch {
-							session.revoke(connection)
+							session.revoke(server.id, connection)
 							store.remove(server.id)
 							catalog.clear()
 							when {

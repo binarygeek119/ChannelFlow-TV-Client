@@ -41,6 +41,7 @@ You can also download `ChannelFlow-TV-v*-release.apk` from [GitHub Releases](htt
 - Live TV guide loaded from the ChannelFlow M3U playlist and XMLTV listings
 - Direct playback of live MPEG-TS streams
 - Quick pin pairing (no server URL to type on the TV)
+- Automatic local/public URL selection: uses the server's local URL on the same network and its public URL everywhere else, with the choice (and a manual override) per saved server
 - Multiple saved servers, with switch / add / remove in settings
 - Channel up/down by number, including decimals such as `119.1`
 - Program details for listings that are not on now
@@ -55,6 +56,18 @@ You can also download `ChannelFlow-TV-v*-release.apk` from [GitHub Releases](htt
 4. The TV saves the server and opens the guide.
 
 The pin relay is `https://channelflow.duckdns.org` and is not user-configurable. Pins last 10 minutes.
+
+### Local and public URLs
+
+ChannelFlow-Server hands the TV both its public URL and its local (LAN) URL during pairing. The TV checks the local URL with a short `GET /health` and:
+
+- uses the **local URL** while it answers, so guide data and streams stay on your network
+- uses the **public URL** when it does not, for example when the TV is away from home
+- switches on its own when a request on the current URL stops working, and remembers the switch
+
+Both URLs are shown for each saved server under **Settings → Server → Switch server**, where the route can also be pinned to **Automatic**, **Local URL only**, or **Public URL only**. Servers paired before this update keep working with their single address; the reachability check only runs when both URLs were handed out.
+
+Set **Local Base URL** in ChannelFlow-Server (General settings) so the local URL is a fixed LAN address rather than whatever host the browser happened to use.
 
 ## Building
 

@@ -42,7 +42,12 @@ object ChannelFlowPinCrypto {
 
 	@Serializable
 	data class Payload(
-		val m3u: String,
-		val xmltv: String,
+		val m3u: String = "",
+		val xmltv: String = "",
+		// Both variants are optional: servers older than the public/local update send neither.
+		val m3uPublic: String = "",
+		val xmltvPublic: String = "",
+		val m3uLocal: String = "",
+		val xmltvLocal: String = "",
 	)
 }

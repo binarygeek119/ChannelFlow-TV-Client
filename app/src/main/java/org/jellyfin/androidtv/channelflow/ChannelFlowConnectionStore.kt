@@ -64,6 +64,20 @@ class ChannelFlowConnectionStore(
 		return true
 	}
 
+	fun setEndpointMode(serverId: String, mode: ChannelFlowEndpointMode): Boolean {
+		val current = _state.value
+		val server = current.servers.firstOrNull { it.id == serverId } ?: return false
+		if (server.endpointMode == mode) return true
+		commit(
+			current.copy(
+				servers = current.servers.map { saved ->
+					if (saved.id == serverId) saved.copy(endpointMode = mode) else saved
+				},
+			)
+		)
+		return true
+	}
+
 	fun remove(serverId: String) {
 		val remaining = _state.value.servers.filterNot { it.id == serverId }
 		val next = remaining.firstOrNull { it.id == _state.value.activeServerId } ?: remaining.firstOrNull()

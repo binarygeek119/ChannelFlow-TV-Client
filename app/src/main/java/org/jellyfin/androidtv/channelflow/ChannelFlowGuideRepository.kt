@@ -32,6 +32,7 @@ class ChannelFlowGuideRepository(
 	private val store: ChannelFlowConnectionStore,
 	private val liveTvPreferences: LiveTvPreferences,
 	private val access: Lazy<ChannelFlowAccessGuard>,
+	private val resolver: ChannelFlowEndpointResolver,
 ) {
 	private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 	private val mutex = Mutex()
@@ -42,6 +43,10 @@ class ChannelFlowGuideRepository(
 	private var channels: List<ChannelFlowChannel> = emptyList()
 	private var programs: List<ChannelFlowProgram> = emptyList()
 	private var loadedAt: Long = 0L
+	@Volatile
+	private var loadedRoute: ChannelFlowActiveRoute? = null
+	@Volatile
+	private var loading = false
 	private val http = OkHttpClient.Builder()
 		.connectTimeout(30, TimeUnit.SECONDS)
 		.readTimeout(3, TimeUnit.MINUTES)
@@ -49,6 +54,21 @@ class ChannelFlowGuideRepository(
 		.followRedirects(true)
 		.followSslRedirects(true)
 		.build()
+
+	init {
+		// The local and public URL carry different absolute stream links, so a route change
+		// means the guide has to be fetched again from the endpoint now in use.
+		scope.launch {
+			resolver.active.collect { choice ->
+				if (choice == null || loading) return@collect
+				if (choice.serverId != store.activeServerId) return@collect
+				if (choice == loadedRoute) return@collect
+				Timber.i("ChannelFlow endpoint changed to %s; reloading the guide", choice.route)
+				clear()
+				prefetchLatest()
+			}
+		}
+	}
 
 	fun prefetchLatest() {
 		if (!store.isConnected) return
@@ -144,6 +164,7 @@ class ChannelFlowGuideRepository(
 		channels = emptyList()
 		programs = emptyList()
 		loadedAt = 0L
+		loadedRoute = null
 		ChannelFlowGuideClock.updateCoverage(emptyList())
 		channelsReady.value = false
 		programsReady.value = false
@@ -191,8 +212,13 @@ class ChannelFlowGuideRepository(
 	private fun startLoad(connection: ChannelFlowConnection): Job {
 		channelsReady.value = false
 		programsReady.value = false
+		loading = true
 		return scope.launch {
-			load(connection)
+			try {
+				load(connection)
+			} finally {
+				loading = false
+			}
 		}.also { loadJob = it }
 	}
 
@@ -200,7 +226,17 @@ class ChannelFlowGuideRepository(
 		supervisorScope {
 			launch {
 				try {
-					val nextChannels = runCatching { M3uParser.parse(fetchText(connection, connection.m3uUrl)) }
+					val nextChannels = runCatching {
+						resolver.withActiveFailover(store, connection) { active ->
+							val playlist = fetchText(connection, active.m3uUrl)
+							val parsed = M3uParser.parse(playlist).map { channel -> channel.rebased(connection, active) }
+							// Remember which endpoint produced these links, not just the one
+							// that happens to be active once the load is over.
+							loadedRoute = connection.routeOf(active)
+								?.let { ChannelFlowActiveRoute(store.activeServerId.orEmpty(), it) }
+							parsed
+						}
+					}
 						.onFailure { Timber.w(it, "Unable to load ChannelFlow M3U") }
 						.getOrDefault(emptyList())
 					mutex.withLock { channels = nextChannels }
@@ -211,7 +247,12 @@ class ChannelFlowGuideRepository(
 			}
 			launch {
 				try {
-					val nextPrograms = runCatching { XmltvParser.parse(fetchText(connection, connection.epgUrl)) }
+					val nextPrograms = runCatching {
+						resolver.withActiveFailover(store, connection) { active ->
+							val listings = fetchText(connection, active.epgUrl)
+							XmltvParser.parse(listings).map { program -> program.rebased(connection, active) }
+						}
+					}
 						.onFailure { Timber.w(it, "Unable to load ChannelFlow XMLTV") }
 						.getOrNull()
 					if (nextPrograms != null) {
@@ -238,7 +279,17 @@ class ChannelFlowGuideRepository(
 
 	private fun isFresh(): Boolean {
 		val stale = System.currentTimeMillis() - loadedAt > CACHE_TTL_MS
-		return !stale && channels.isNotEmpty() && programsReady.value && loadedAt > 0L
+		return !stale && channels.isNotEmpty() && programsReady.value && loadedAt > 0L && routeStillActive()
+	}
+
+	/**
+	 * False when the guide was fetched from an endpoint the app no longer uses, for example
+	 * after leaving the house and failing over from the local URL to the public one.
+	 */
+	private fun routeStillActive(): Boolean {
+		val serverId = store.activeServerId ?: return true
+		val current = loadedRoute ?: return resolver.peekActive(serverId) == null
+		return current == resolver.peekActive(serverId)
 	}
 
 	private fun ChannelFlowChannel.toBaseItem(now: LocalDateTime): BaseItemDto {
@@ -330,3 +381,20 @@ class ChannelFlowGuideRepository(
 		private fun redact(url: String): String = url.replace(Regex("apiKey=[^&]*", RegexOption.IGNORE_CASE), "apiKey=***")
 	}
 }
+
+/** Rewrites playlist links so they point at the endpoint the app is actually using. */
+private fun ChannelFlowChannel.rebased(
+	connection: ChannelFlowConnection,
+	active: ChannelFlowEndpoint,
+): ChannelFlowChannel = copy(
+	streamUrl = connection.remapUrl(streamUrl, active.baseUrl),
+	logoUrl = logoUrl?.let { connection.remapUrl(it, active.baseUrl) },
+)
+
+/** Rewrites listing artwork links the same way as the playlist links. */
+private fun ChannelFlowProgram.rebased(
+	connection: ChannelFlowConnection,
+	active: ChannelFlowEndpoint,
+): ChannelFlowProgram = copy(
+	iconUrl = iconUrl?.let { connection.remapUrl(it, active.baseUrl) },
+)
