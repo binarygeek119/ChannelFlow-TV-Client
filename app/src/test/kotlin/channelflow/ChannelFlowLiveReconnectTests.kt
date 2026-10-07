@@ -43,11 +43,4 @@ class ChannelFlowLiveReconnectTests : FunSpec({
 			alreadyScheduled = false,
 		) shouldBe false
 	}
-
-	test("treats a frozen HTTP byte count as a flushed server buffer") {
-		ChannelFlowLiveReconnect.inputStalled(100, 100, 2_000L) shouldBe true
-		ChannelFlowLiveReconnect.inputStalled(100, 100, 1_999L) shouldBe false
-		ChannelFlowLiveReconnect.inputStalled(100, 180, 5_000L) shouldBe false
-		ChannelFlowLiveReconnect.inputStalled(null, 100, 5_000L) shouldBe false
-	}
 })

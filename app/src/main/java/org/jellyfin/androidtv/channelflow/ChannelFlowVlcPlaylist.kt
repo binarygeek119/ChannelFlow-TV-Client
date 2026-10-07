@@ -43,7 +43,6 @@ object ChannelFlowVlcPlaylist {
 			appendLine("#EXTVLCOPT:live-caching=$START_CACHING_MS")
 			appendLine("#EXTVLCOPT:prefetch-buffer-size=$PREFETCH_BUFFER_KIB")
 			appendLine("#EXTVLCOPT:prefetch-read-size=$PREFETCH_READ_SIZE")
-			appendLine("#EXTVLCOPT:http-reconnect=true")
 			appendLine("#EXTVLCOPT:ts-cc-check=0")
 			if (!apiKey.isNullOrBlank()) appendLine("#EXTVLCOPT:http-header=X-Api-Key: $apiKey")
 			appendLine(playUrl)
@@ -72,6 +71,17 @@ object ChannelFlowVlcPlaylist {
 		val encoded = URLEncoder.encode(apiKey, Charsets.UTF_8.name())
 		val separator = if (url.contains('?')) '&' else '?'
 		return "$url${separator}apiKey=$encoded"
+	}
+
+	fun withLiveEdge(url: String, now: Long = System.currentTimeMillis()): String {
+		val base = url.substringBefore('#')
+		val fragment = url.substringAfter('#', missingDelimiterValue = "")
+		val path = base.substringBefore('?')
+		val query = base.substringAfter('?', missingDelimiterValue = "")
+		val params = query.split('&').filter { it.isNotEmpty() && !it.startsWith("_r=") }.toMutableList()
+		params += "_r=$now"
+		val rebuilt = "$path?${params.joinToString("&")}"
+		return if (url.contains('#')) "$rebuilt#$fragment" else rebuilt
 	}
 
 	private fun escape(value: String): String =

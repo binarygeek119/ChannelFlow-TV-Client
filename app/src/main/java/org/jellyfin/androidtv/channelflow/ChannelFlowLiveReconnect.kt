@@ -4,13 +4,12 @@ package org.jellyfin.androidtv.channelflow
  * Live MPEG-TS reconnect policy for ChannelFlow.
  *
  * Emergency alerts flush the shared server buffer and reset the encoder. The HTTP
- * socket then ends, stalls, or jumps timestamps. The player must keep reopening the
- * live edge instead of treating that as a fatal error.
+ * socket then ends or the decoder stops advancing. Reopen the live edge on those
+ * events; do not treat a slow first buffer or frozen libVLC byte counters as failure.
  */
 object ChannelFlowLiveReconnect {
-	const val STALL_MS = 4_000L
-	const val INPUT_IDLE_MS = 2_000L
-	const val OPEN_TIMEOUT_MS = 8_000L
+	const val STALL_MS = 8_000L
+	const val REOPEN_TIMEOUT_MS = 20_000L
 	const val SUPPRESS_STOP_MS = 1_500L
 	const val WATCHDOG_MS = 1_000L
 
@@ -27,9 +26,4 @@ object ChannelFlowLiveReconnect {
 		userPaused: Boolean,
 		alreadyScheduled: Boolean,
 	): Boolean = live && !userStopped && !userPaused && !alreadyScheduled
-
-	fun inputStalled(previousBytes: Int?, currentBytes: Int?, idleMs: Long): Boolean {
-		if (previousBytes == null || currentBytes == null) return false
-		return currentBytes == previousBytes && idleMs >= INPUT_IDLE_MS
-	}
 }
