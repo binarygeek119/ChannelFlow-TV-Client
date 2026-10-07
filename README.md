@@ -82,18 +82,18 @@ The debug APK is written to `app/build/outputs/apk/debug/` as `ChannelFlow-TV-v<
 A local release APK (minified, signed with `keystore/channelflow-release.jks` unless another keystore is configured):
 
 ```shell
-CHANNELFLOW_VERSION=0.0.13 ./gradlew assembleRelease
+CHANNELFLOW_VERSION=0.0.14 ./gradlew assembleRelease
 ```
 
-The release APK is written to `app/build/outputs/apk/release/` as `ChannelFlow-TV-v0.0.13-release.apk`.
+The release APK is written to `app/build/outputs/apk/release/` as `ChannelFlow-TV-v0.0.14-release.apk`.
 
 ## Releases
 
 Pushing a `v*` tag (or running **App / Release APK** from GitHub Actions) builds the release APK and attaches `ChannelFlow-TV-vX.Y.Z-release.apk` to the GitHub Release. The app checks that release from **Settings**, and can download and install it as an update.
 
 ```shell
-git tag v0.0.13
-git push origin v0.0.13
+git tag v0.0.14
+git push origin v0.0.14
 ```
 
 Release APKs are signed with `keystore/channelflow-release.jks` so GitHub updates can install over each other. Optional repository secrets for a different production key: `KEYSTORE` (base64 of the `.jks` file), `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`.
